@@ -15,6 +15,7 @@
 // gcc -o i3ipc.example.1 i3ipc.example.1.c $(pkg-config --libs --cflags i3ipc-glib-1.0)
 
 gint main() {
+  
   i3ipcConnection *conn;
   gchar *reply;
 
@@ -28,4 +29,5 @@ gint main() {
   g_object_unref(conn);
 
   return 0;
+
 }
