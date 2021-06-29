@@ -49,3 +49,45 @@
 // - middle click on a window to close it
 // - drag & drop a window to move it & reparent it (and its children)
 
+#include <stdio.h>
+#include <stdlib.h>
+
+int main()
+{
+    FILE *fp;
+    char  ch;
+    int depth = 0;
+
+    fp = fopen("tree.simplified.json", "r");
+
+    if (fp == NULL) { printf("File is not available \n"); exit(1); }
+
+
+    while ((ch = fgetc(fp)) != EOF)
+    {
+
+        // calculate depth
+        switch(ch) {
+
+            case '{' :
+
+                depth++;
+                printf("depth increased: d = %d\n", depth);
+                break;
+
+            case '}' :
+
+                depth--;
+                printf("depth decreased: d = %d\n", depth);
+                break;
+
+        }
+
+        
+
+    }
+
+    fclose(fp);
+
+    return 0;
+}
