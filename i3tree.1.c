@@ -18,3 +18,34 @@
 // when the user interacts, the while loop is paused until the interaction is solved.
 
 // just write a function that can parse and act on the json it's given.
+
+
+// CODE TODO
+
+// - calculate depth correctly, keep a running count
+// - print list of monitors
+// - print list of workspaces, per monitor
+// - print list of windows, per workspace
+// - print hierarchy of windows (containers, etc)
+
+// - draw the window tree in the GUI
+//   - box in correct place
+//   - rectangles per-window
+//   - indented correctly
+
+// how are gui updates timed?
+// - periodic
+//      if nothing's happened for a while, redraw the gui (1, 5, or 30 seconds?)
+//      if the trigger works reliably, periodic updates aren't needed
+// - triggered
+//      https://i3wm.org/docs/ipc.html#_subscribing_to_events
+//      Just watch for changes to 'window' and update the gui as-needed? 
+//      write a function 'draw-gui' that refreshes the interface based on a new copy of the window tree
+// - calculated & manually adjusted
+//      include a button to recalculate the gui
+
+// - click on a window to focus it
+//      if you want to focus a particular window, you can do it like so: i3.focus(title="window title")
+// - middle click on a window to close it
+// - drag & drop a window to move it & reparent it (and its children)
+
