@@ -54,9 +54,17 @@
 
 int main()
 {
+
     FILE *fp;
     char  ch;
-    int depth = 0;
+
+    int STATE = 0;
+    // 0        null
+    // 1        token boundary
+
+    int object_depth = 0;
+    char key[100];
+    char value[100];
 
     fp = fopen("tree.simplified.json", "r");
 
@@ -66,22 +74,39 @@ int main()
     while ((ch = fgetc(fp)) != EOF)
     {
 
-        // calculate depth
+
         switch(ch) {
+
+            // calculate depth
+            // {} => object inside
+            // [] =>   list inside
 
             case '{' :
 
-                depth++;
-                printf("depth increased: d = %d\n", depth);
+                object_depth++;
+                printf("depth increased: d = %d\n", object_depth);
                 break;
 
             case '}' :
 
-                depth--;
-                printf("depth decreased: d = %d\n", depth);
+                object_depth--;
+                printf("depth decreased: d = %d\n", object_depth);
                 break;
 
+            
+            case '"' :
+
+
+
+
         }
+
+
+        
+        // print monitors
+        // if (object_depth == 2)
+
+
 
         
 
