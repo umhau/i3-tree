@@ -2,7 +2,7 @@ from i3ipc.aio import Connection
 from i3ipc import Event
 from i3ipc import Connection as Connection_singlethread
 from PyQt5.QtWidgets import QApplication, QWidget, QTreeView, QPushButton, QVBoxLayout
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor, QLinearGradient
 from PyQt5 import QtCore
 from asyncqt import QEventLoop
 import sys
@@ -26,15 +26,24 @@ from pynput.mouse import Button, Controller
 window_width_pixels = 250
 indentation_pixels  = 6
 background_color    = "#3c3b37"
+gradient_color      = "#494844"
 font_color          = "#dcdccc"
 font                = "APL385"
-font_size           = "9pt"
+
+font_size           = "8pt"
+row_vertical_size   = 24
+gradient_center     = int(row_vertical_size/2)
+
 window_title        = "i3tree" + str(time.time())  # needs to be unique
 show_all_workspaces = True
+show_all_workspaces_button = True
 refocus_on_i3tree   = False
+
 show_exp_coll_btns  = False
+
 # how does the user indicate which monitor screen the program should attach to?
 # and how does the user indicate which side of that screen it should attach to?
+# USE A MENU BUTTON
 
 window_on_right     = True
 
@@ -52,14 +61,25 @@ loop = QEventLoop(app)
 asyncio.set_event_loop(loop)
 
 programwindow = QWidget()
-colors_config = \
+colors_config_whole_window = \
     "background-color: " + background_color + " ; " \
     + "color: "          + font_color       + " ; " \
     + "font-family: "    + font             + " ; " \
-    + "font-size: "      + font_size        + " ;"
-programwindow.setStyleSheet(colors_config)
+    + "font-size: "      + font_size        + " ; "
+
+colors_config_row_entries = \
+    "background-color: " + background_color + " ; " \
+    + "color: "          + font_color       + " ; " \
+    + "font-family: "    + font             + " ; " \
+    + "font-size: "      + font_size        + " ; " \
+    + "background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #3c3b37, stop: 1 #cbdaf1);"
+
+programwindow.setStyleSheet(colors_config_whole_window)
+
 
 globalmodel = QStandardItemModel()
+
+# globalmodel.setStyleSheet("QTreeView::item { padding: 10px }")
 
 globaltree = QTreeView(programwindow)
 globaltree.header().hide()
@@ -103,6 +123,26 @@ if show_exp_coll_btns:
     contract_button.clicked.connect(collapse_all_nodes)
     globallayout.addWidget(contract_button, 2)
 
+if show_all_workspaces_button:
+    
+    # button to show / hide all but the present workspace
+    def show_hide_other_workspaces():
+
+        global show_all_workspaces
+
+        if show_all_workspaces:
+            show_all_workspaces = False
+        else:
+            show_all_workspaces = True
+
+        
+
+    showhide_button = QPushButton('toggle all workspaces')
+    showhide_button.setToolTip('collapse the whole tree')
+    showhide_button.move(100,70)
+    showhide_button.clicked.connect(show_hide_other_workspaces)
+    globallayout.addWidget(showhide_button, 3)
+
 # button to close program
 def close_program():
     sys.exit()
@@ -110,7 +150,7 @@ exit_button = QPushButton('exit')
 exit_button.setToolTip('close i3tree')
 exit_button.move(100,70)
 exit_button.clicked.connect(close_program)
-globallayout.addWidget(exit_button, 3)
+globallayout.addWidget(exit_button, 4)
 
 # left click action
 def tree_item_left_clicked(index):
@@ -165,6 +205,14 @@ def alter_gap_on_current_workspace(new_width):
 
     ipc_query(msg="'gaps " + chosenside + " current set " + str(new_width) + "'")
 
+def create_gradient_brush():
+    horGradient = QLinearGradient(0, 0, 100, 0)
+    verGradient = QLinearGradient(0, 20, 0, 20)
+    gradient = verGradient 
+    gradient.setColorAt(0.0, QColor("blue"))
+    gradient.setColorAt(1.0, QColor("red"))
+    brush = QBrush(gradient)
+    return brush
 
 
 ## -- [ main asynchronous loop ] -------------------------------------------- ##
@@ -172,6 +220,18 @@ def alter_gap_on_current_workspace(new_width):
 async def main():
 
     i3 = await Connection(auto_reconnect=True).connect()
+
+    # create_gradient_brush = BRUSH
+
+    # horGradient = QLinearGradient(0, 0, 100, 0)
+    # verGradient = QLinearGradient(0, 0, 0, 10)
+    # verGradient.setSpread(QLinearGradient.ReflectSpread)
+    # gradient = verGradient
+    gradient = QLinearGradient(0, 0, 0, gradient_center)
+    gradient.setSpread(QLinearGradient.ReflectSpread)
+    gradient.setColorAt(0.0, QColor(background_color))
+    gradient.setColorAt(1.0, QColor(gradient_color))
+    brush = QBrush(gradient)
 
     # [ --- update the gui --- ] --------------------------------------------- #
 
@@ -232,6 +292,10 @@ async def main():
         # need a base node to attach to
         root = globalmodel.invisibleRootItem()
 
+        # gradient = QLinearGradient(0, 0, 1, 1) # , 0 , '#3c3b37', 1 , '#cbdaf1' )
+        # gradient = QLinearGradient(0, 0, 700, 0) 
+        # gradient.setCoordinateMode(gradient.ObjectMode)
+
         # add new windows
         for i3container in root_container.descendants():
 
@@ -258,11 +322,42 @@ async def main():
             rowitem = QStandardItem(i3container.name)
             rowitem.setData(container_id)
 
+            # yellow = abs(self.DB_MIN + 20) / db_range  # -20 db
+            # red = abs(self.DB_MIN) / db_range          # 0 db
+
+            # gradient = QLinearGradient()
+            # gradient.setColorAt(0, QColor(0, 255, 0))            # Green
+            # # gradient.setColorAt(.5, QColor(255, 255, 0))     # Yellow
+            # gradient.setColorAt(.5, QColor(255, 0, 0))          # Red
+
+            # gradient = QLinearGradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #3c3b37, stop: 1 #cbdaf1)
+            # gradient = QLinearGradient(0, 0, 1, 1) # , 0 , '#3c3b37', 1 , '#cbdaf1' )
+            # gradient.setCoordinateMode(gradient.ObjectMode)
+
+            # create_gradient_brush = BRUSH
+
+            # rowitem.setStyleSheet(colors_config_row_entries)
+            rowitem.setBackground(brush)
+            # rowitem.setHeight(20)
+
+            # rowsize = QtCore.QSize
+            # QtCore.QSize.setHeight(rowsize, 20)
+
+            rowitem.setSizeHint(QtCore.QSize(20,row_vertical_size))
+
             # add the item to the GUI
             parent.appendRow(rowitem)
 
             # add the item to the list of processed nodes
             con2item[container_id] = parent.child(parent.rowCount() - 1)
+
+
+
+        # root.setBackground(gradient)
+
+        # for rowitem in globalmodel:
+        #     print(rowitem)
+        # globalmodel.setBackground(gradient)
 
         # [ --- expand and collapse the rows to match prior --- ] ------------ #
 

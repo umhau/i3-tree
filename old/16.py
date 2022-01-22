@@ -2,7 +2,7 @@ from i3ipc.aio import Connection
 from i3ipc import Event
 from i3ipc import Connection as Connection_singlethread
 from PyQt5.QtWidgets import QApplication, QWidget, QTreeView, QPushButton, QVBoxLayout
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor, QLinearGradient
 from PyQt5 import QtCore
 from asyncqt import QEventLoop
 import sys
@@ -14,32 +14,62 @@ from os import popen
 import atexit
 import time
 from pynput.mouse import Button, Controller
+# from pynput import mouse
+
+## TODO
+
+# if the clicked window is on the same workspace / output as the tree, refocus
+# the tree after focusing the window. Should fix some of the issues there.
 
 ## -- [ variables ] --------------------------------------------------------- ##
 
 window_width_pixels = 250
 indentation_pixels  = 6
 background_color    = "#3c3b37"
+gradient_color      = "#494844"
 font_color          = "#dcdccc"
 font                = "APL385"
-font_size           = "9pt"
+
+font_size           = "8pt"
+row_vertical_size   = 24
+gradient_center     = int(row_vertical_size/2)
+
 window_title        = "i3tree" + str(time.time())  # needs to be unique
+
+# no good way yet to reliably detect bar heights, so just hardcode for now. 
+# (bar height is generally 10 pixels more than the font size, unless specified 
+# separately)
+# sidebars aren't possible in i3 (which is why this project is so 
+# hacked-together).
+
+bar_height_bottom   = 20
+bar_height_top      = 0
+
+# showing all workspaces slows it down considerably: 1.3 vs 0.02 seconds
 show_all_workspaces = True
-refocus_on_i3tree   = False
+
+# button to toggle whether or not all workspaces are shown
+workspaces_button = False
+
+# button to close the program (otherwise just close like any other window)
+exit_button       = False
+
+# button to collapse or expand all the rows
 show_exp_coll_btns  = False
+
 # how does the user indicate which monitor screen the program should attach to?
 # and how does the user indicate which side of that screen it should attach to?
+# use a menu button? Or just use a config file?
 
-window_on_right     = True
+# put the program window on the left or right side of the screen
+window_on_right     = False
 
 # by default, attach to the primary monitor screen.
 # if the user specifies otherwise, try and use that.
 
 user_chosen_output  = 'HDMI-4'
 
-# for now, we're going to attach to the currently focused output. 
-# this no longer works! relative placement isn't working. Find a way to make it
-# absolute.
+# for now, we're going to attach to the currently focused output.
 
 ## -- [ gui components ] ---------------------------------------------------- ##
 
@@ -47,13 +77,16 @@ app = QApplication(sys.argv)
 loop = QEventLoop(app)
 asyncio.set_event_loop(loop)
 
+# set the appearance of the window as a whole
 programwindow = QWidget()
-colors_config = \
+
+colors_config_whole_window = \
     "background-color: " + background_color + " ; " \
     + "color: "          + font_color       + " ; " \
     + "font-family: "    + font             + " ; " \
-    + "font-size: "      + font_size        + " ;"
-programwindow.setStyleSheet(colors_config)
+    + "font-size: "      + font_size        + " ; "
+
+programwindow.setStyleSheet(colors_config_whole_window)
 
 globalmodel = QStandardItemModel()
 
@@ -61,6 +94,7 @@ globaltree = QTreeView(programwindow)
 globaltree.header().hide()
 globaltree.setModel(globalmodel)
 globaltree.setIndentation(indentation_pixels)
+globaltree.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
 globallayout = QVBoxLayout(programwindow)
 globallayout.addWidget(globaltree)
@@ -99,14 +133,35 @@ if show_exp_coll_btns:
     contract_button.clicked.connect(collapse_all_nodes)
     globallayout.addWidget(contract_button, 2)
 
-# button to close program
-def close_program():
-    sys.exit()
-exit_button = QPushButton('exit')
-exit_button.setToolTip('close i3tree')
-exit_button.move(100,70)
-exit_button.clicked.connect(close_program)
-globallayout.addWidget(exit_button, 3)
+if workspaces_button:
+    
+    # button to show / hide all but the present workspace
+    def show_hide_other_workspaces():
+
+        global show_all_workspaces
+
+        if show_all_workspaces:
+            show_all_workspaces = False
+        else:
+            show_all_workspaces = True
+
+    showhide_button = QPushButton('toggle all workspaces')
+    showhide_button.setToolTip('collapse the whole tree')
+    showhide_button.move(100,70)
+    showhide_button.clicked.connect(show_hide_other_workspaces)
+    globallayout.addWidget(showhide_button, 3)
+
+if exit_button:
+
+    # button to close program
+    def close_program():
+        sys.exit()
+
+    exit_button = QPushButton('exit')
+    exit_button.setToolTip('close i3tree')
+    exit_button.move(100,70)
+    exit_button.clicked.connect(close_program)
+    globallayout.addWidget(exit_button, 4)
 
 # left click action
 def tree_item_left_clicked(index):
@@ -152,16 +207,7 @@ def ipc_query(req="command", msg=""):
     ans = popen("i3-msg -t " + req + " " +  msg).readlines()[0]
     return loads(ans)
 
-
-
 def alter_gap_on_current_workspace(new_width):
-
-    # You can define gaps either globally or per workspace using the following 
-    # syntax. Note that the gaps configurations should be ordered from least 
-    # specific to most specific as some directives can overwrite others.
-
-    # gaps [inner|outer|horizontal|vertical|top|left|bottom|right] <px>
-    # workspace <ws> gaps [inner|outer|horizontal|vertical|top|left|bottom|right] <px>
 
     if window_on_right:
         chosenside = 'right'
@@ -170,131 +216,151 @@ def alter_gap_on_current_workspace(new_width):
 
     ipc_query(msg="'gaps " + chosenside + " current set " + str(new_width) + "'")
 
-
-
 ## -- [ main asynchronous loop ] -------------------------------------------- ##
 
 async def main():
 
+    # set gradient appearance
+    gradient = QLinearGradient(0, 0, 0, gradient_center)
+    gradient.setSpread(QLinearGradient.ReflectSpread)
+    gradient.setColorAt(0.0, QColor(background_color))
+    gradient.setColorAt(1.0, QColor(gradient_color))
+    brush = QBrush(gradient)
+
     i3 = await Connection(auto_reconnect=True).connect()
+
+    # [ --- update the gui --- ] --------------------------------------------- #
 
     async def updatetree(conn, event):
 
+        # [ --- initial preparations --- ] ----------------------------------- #
+
         starttime = time.time()
 
-        # sometimes there's errors in parsing the json - missing comma?
         try:
             tree = await i3.get_tree()
         except:
             print('failed to parse json!')
             return
 
-        # define the root container - this could be per-workspace or global.
-        # Do we want to show the containers from all workspaces? If not, choose
-        # the current workspace as the root, so we only see the sub-nodes from
-        # within that workspace.
-        if show_all_workspaces:
-            root_container = tree
-        # automagically find the workspace that's currently focused. This will 
-        # be awkward in a multimonitor setup, since it'll change when your
-        # mouse goes to the other screen
-        else:
-            workspace = tree.find_focused().workspace()
-            root_container = workspace
-
-        # save a copy of the tree model before it's reset, we need this to 
-        # figure out window placement in the gui
+        # save a copy of the tree model before it's reset
         globaltreemodel = globaltree.model()
 
         # clear variables
         expansion_dictionary.clear()
         con2item = {}
 
-        # figure out which rows were collapsed by the user in the gui (this is
-        # recursive, and a lot of recursive? containers slows it down painfully)
-        def store_expansion_state(model, index=QtCore.QModelIndex()):
+        # [ --- figure out which rows are visually collapsed --- ] ----------- #
 
-            # record whether or not the gui tree element is expanded
+        def getExpandState(model, index=QtCore.QModelIndex()):
+
             if index.isValid():
-                # if index not in expansion_dictionary.keys(): # this check costs 0.001 seconds
-                    item = model.itemFromIndex(index)
-                    expansion_dictionary[item.data()] = globaltree.isExpanded(index) 
+                if index not in expansion_dictionary.keys():
+                    item = globaltreemodel.itemFromIndex(index)
+                    expansion_dictionary[item.data()] = globaltree.isExpanded(index)
 
-            # the tree is recursive; we have to iterate over the sub-elements
-            # of what we're currently looking at, and over the sub-elements of 
-            # those sub-elements, and so on ad nauseum.
             for row in range(model.rowCount(index)):
+                # for col in range(model.columnCount(index)):
+                    
+                    childIndex = model.index(row, 0, index)
 
-                childIndex = model.index(row, 0, index)
+                    for childRow in range(model.rowCount(childIndex)):
+                        getExpandState(model, childIndex)
 
-                for childRow in range(model.rowCount(childIndex)):
-
-                    store_expansion_state(model, childIndex)
-
-        store_expansion_state(globaltreemodel)
+        getExpandState(globaltreemodel)
 
         # [ --- create the new version of the gui tree --- ] ----------------- #
 
-        # clear the old version of the gui tree model
+        # clear the old version 
         globalmodel.setRowCount(0)
 
-        # get the unique id of the root node - we're using the i3 container ids
-        root_node_unique_id = str(root_container.id)
+        # set root container
+        root_container = tree
 
-        # the first node of the tree is a priori. use a builtin root.
+        # need a base node to attach to
         root = globalmodel.invisibleRootItem()
 
-        # create the new version of the gui tree model, entry-by-entry. Use 
-        # the i3pc tools to list all the 'descendants' (sub-nodes) of the given
-        # root container: first the direct descendants, and then the indirect
-        # descendants. Because it's always in that order, we are always 
-        # confident that the parent window is processed before any of its 
-        # children. This, in turn, lets us skip a lot of logic and simplify the
-        # data structures.
+        # define the root container - this could be per-workspace or global
+        if not show_all_workspaces:
+
+            workspace = tree.find_focused().workspace()
+
+            current_workspace_name = workspace.name
+
+            current_workspace_unique_id = str(workspace.id)
+            
+        # else:
+        #     workspace = tree.find_focused().workspace()
+        #     root_container = workspace
+
+        # add new windows
         for i3container in root_container.descendants():
 
-            # don't list the gui itself. if we're not careful, we'll also skip
-            # other, unrelated containers.  
-
-            # for each floating container in the tree, see if the first child
-            # within it has a name matching our gui's title. If so, do not add
-            # that floating container to the gui list.
-            if 'floating_con' in str(i3container.type):
-
-                # you can iterate over the contents, but you cannot address the
-                # contents with i3container[0]. ¯\_(ツ)_/¯ Best we can do is
-                # always break after the first element.
-                for childcontainer in i3container:
-
-                    if window_title in str(childcontainer.name):
-                        print('found the floater')
-                        print(str(i3container.parent.id))
-
-                    # we only, ever, want the first iterable.
-                    break
-
-                continue
-
-            # detect the gui itself, and then remove its 
-            if window_title in str(i3container.name):
-                print('delete this ones parent: ' , str(i3container.parent.name), ' aka: ' , str(i3container.parent.id) )
-                continue
-
+            parent_id = str(i3container.parent.id)
             container_id = str(i3container.id)
-            parent_id    = str(i3container.parent.id)
 
-            # find the parent
-            if parent_id == root_node_unique_id:
-                parent = root
+            if 'floating_con' in str(i3container.type):
+                continue
+
+            # don't include the i3tree in the list of program windows
+            elif window_title in str(i3container.name):
+                continue
+
+            elif '__i3_scratch' in str(i3container.name):
+                continue
+
+            # skip the portion of the tree with the scratchpad window (skipping
+            # the top level item will also skip its children)
+            elif '__i3' == str(i3container.name):
+                continue
+
+            # don't include docks in the list
+            elif 'topdock' == str(i3container.name):
+                continue
+
+            elif 'bottomdock' == str(i3container.name):
+                continue
+
+            # identify parent nodes and exclude anything above the level of workspaces
+            elif str(i3container.type) == 'output':
+                continue
+
+            elif str(i3container.type) == 'workspace':
+
+                # if we want only the current workspace displayed, then only set
+                # the current workspace as a child of the root (still have to 
+                # iterate over the whole json though)
+                if not show_all_workspaces:
+
+                    # if parent_id == current_workspace_unique_id:
+                    #     parent = root
+
+                    if str(i3container.name) == current_workspace_name:
+                        parent = root
+                    else:
+                        continue
+                else:
+
+                    parent = root
+
+            # find the parent(s)
             else:
+
                 try:
                     parent = con2item[parent_id]
+
                 except:
-                    print("this one's a floater")
+                    continue
 
             # add the container ID to the item in the GUI
             rowitem = QStandardItem(i3container.name)
             rowitem.setData(container_id)
+
+            # add visual gradient
+            rowitem.setBackground(brush)
+
+            # change vertical height of row
+            rowitem.setSizeHint(QtCore.QSize(20,row_vertical_size))
 
             # add the item to the GUI
             parent.appendRow(rowitem)
@@ -314,7 +380,6 @@ async def main():
                     if expansion_dictionary[item.data()]:
                         globaltree.setExpanded(index, True)
                 except:
-                    # print('new container?')
                     globaltree.setExpanded(index, True)
 
             # if the index (or root index) has children, set their states
@@ -404,15 +469,25 @@ print('active display width:  ' , active_display_width)
 
 # vertical placement: zero is the top of the window (excluding the title bar) 
 #                     flush with the top of the monitor. note the title bar, 
-#                     and border, is above the top of the monito
+#                     and border, is above the top of the monitor
+
 # horizontal placement: zero is the left side of the window flush with the 
 #                     left side of the current monitor
 
 width = window_width_pixels
-height = active_display_height
 
-horizontal_placement = active_display_width - window_width_pixels - 2
-vertical_placement = 0
+height = active_display_height - bar_height_bottom - bar_height_top
+
+vertical_placement = 0 + bar_height_top
+
+if window_on_right:
+
+    horizontal_placement = active_display_width - window_width_pixels - 2
+
+else:
+
+    horizontal_placement = -2 # active_display_width - window_width_pixels - 2
+
 
 programwindow.setGeometry(horizontal_placement, vertical_placement, width, height)
 programwindow.setWindowTitle(window_title)
@@ -424,10 +499,6 @@ try:
     i3treewindow = tree_singlethread.find_named(window_title)[0]
     i3treewindow.command('focus')
     i3treewindow.command('floating enable')
-    # i3treewindow.floating
-    # for i in range(100):
-    #     i3treewindow.command('move right')
-    # i3treewindow.command('resize set ' + str(window_width_pixels))
     i3treewindow.command('border none')
     i3treewindow.command('sticky toggle')
 

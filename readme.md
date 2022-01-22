@@ -1,5 +1,14 @@
 # i3tree
 
+Fix appearance:
+- window icons
+- textured rows
+- wider rows & thinner font
+- bar integration (general purpose detection?)
+
+Interface:
+- exit programs from bar
+- 
 
 
 ## notes
